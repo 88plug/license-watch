@@ -1,0 +1,13 @@
+.env
+.env.*
+*.log
+/dist/
+/build/
+/node_modules/
+/.venv/
+__pycache__/
+*.pyc
+*.wacz
+/evidence/
+.DS_Store
+/tmp/
