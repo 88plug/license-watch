@@ -1,0 +1,133 @@
+# L6 — Evidence preservation.
+#
+# Triggered by workflow_dispatch (manual) or repository_dispatch from
+# L5 with event_type=violation.confirmed and a payload containing the
+# candidate JSON. Severity=high candidates run the full triple-anchor
+# chain; others are recorded but not anchored to keep the pipeline
+# free-tier safe.
+name: L6 evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_json:
+        description: "Confirmed-violation candidate JSON (single object)"
+        required: true
+        type: string
+  repository_dispatch:
+    types: [violation.confirmed]
+
+permissions:
+  contents: write   # gitsign commits to evidence repo / submodule
+  id-token: write   # OIDC token for cosign + gitsign keyless signing
+
+concurrency:
+  group: evidence-${{ github.event.client_payload.id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      EVIDENCE_REPO_DIR: ${{ github.workspace }}/evidence-repo
+    steps:
+      - name: Checkout license-watch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.4'
+          cache: true
+
+      - name: Install Sigstore + OTS tooling
+        run: |
+          set -euxo pipefail
+          COSIGN_VERSION=v2.4.1
+          GITSIGN_VERSION=v0.12.0
+          REKOR_VERSION=v1.3.10
+          curl -fsSL -o /usr/local/bin/cosign \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          curl -fsSL -o /usr/local/bin/gitsign \
+            "https://github.com/sigstore/gitsign/releases/download/${GITSIGN_VERSION}/gitsign_${GITSIGN_VERSION#v}_linux_amd64"
+          curl -fsSL -o /usr/local/bin/rekor-cli \
+            "https://github.com/sigstore/rekor/releases/download/${REKOR_VERSION}/rekor-cli-linux-amd64"
+          sudo chmod +x /usr/local/bin/cosign /usr/local/bin/gitsign /usr/local/bin/rekor-cli
+          python3 -m pip install --user 'opentimestamps-client==0.7.2'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure gitsign (keyless, OIDC)
+        run: |
+          git config --global gpg.x509.program gitsign
+          git config --global gpg.format x509
+          git config --global commit.gpgsign true
+          git config --global user.name  "license-watch L6"
+          git config --global user.email "andrew@88plug.com"
+
+      - name: Build preserve binary
+        run: go build -trimpath -o ./bin/preserve ./cmd/preserve
+
+      - name: Read candidate JSON
+        id: cand
+        run: |
+          if [[ -n "${{ github.event.inputs.candidate_json }}" ]]; then
+            printf '%s' "${{ github.event.inputs.candidate_json }}" > /tmp/cand.json
+          else
+            printf '%s' "${{ toJson(github.event.client_payload) }}" > /tmp/cand.json
+          fi
+          jq -r '.severity // "unknown"' /tmp/cand.json > /tmp/sev
+          echo "severity=$(cat /tmp/sev)" >> "$GITHUB_OUTPUT"
+          echo "id=$(jq -r '.id' /tmp/cand.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Gate — only high severity preserves with anchoring
+        if: ${{ steps.cand.outputs.severity != 'high' }}
+        run: |
+          echo "::notice::severity=${{ steps.cand.outputs.severity }} — skipping anchor chain."
+          exit 0
+
+      - name: Run L6 preservation chain
+        if: ${{ steps.cand.outputs.severity == 'high' }}
+        env:
+          # The container build uses these; expose them here too for
+          # parity with the Hetzner box.
+          FREE_TSA_URL: https://freetsa.org/tsr
+          DIGICERT_TSA_URL: http://timestamp.digicert.com
+          REKOR_URL: https://rekor.sigstore.dev
+          OTS_CALENDAR: https://alice.btc.calendar.opentimestamps.org
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence
+          cat /tmp/cand.json | ./bin/preserve \
+            --root ./evidence \
+            --operator "andrew@88plug.com" \
+            --timeout 30m > manifest.json
+          cat manifest.json
+
+      - name: Upload manifest as artifact
+        if: ${{ steps.cand.outputs.severity == 'high' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-${{ steps.cand.outputs.id }}
+          path: |
+            evidence/${{ steps.cand.outputs.id }}/
+            manifest.json
+          retention-days: 90
+
+      - name: Commit + push evidence to dual remotes
+        if: ${{ steps.cand.outputs.severity == 'high' && env.EVIDENCE_PUSH == '1' }}
+        env:
+          EVIDENCE_PUSH: ${{ secrets.EVIDENCE_PUSH }}
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+        run: |
+          set -euxo pipefail
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/88plug/license-watch-evidence.git" "$EVIDENCE_REPO_DIR"
+          cp -r evidence/${{ steps.cand.outputs.id }} "$EVIDENCE_REPO_DIR/"
+          cd "$EVIDENCE_REPO_DIR"
+          git remote add codeberg "https://${CODEBERG_TOKEN}@codeberg.org/88plug/license-watch-evidence.git" || true
+          git add "${{ steps.cand.outputs.id }}"
+          git commit -S -m "evidence(${{ steps.cand.outputs.id }}): preserved via L6"
+          git push origin main
+          git push codeberg main || echo "::warning::codeberg push failed"
