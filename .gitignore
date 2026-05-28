@@ -11,3 +11,6 @@ __pycache__/
 /evidence/
 .DS_Store
 /tmp/
+/drafts/
+dispositions.jsonl
+failed_alerts.jsonl

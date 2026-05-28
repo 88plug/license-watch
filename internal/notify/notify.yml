@@ -1,0 +1,45 @@
+# L8 — Apprise notification fanout config.
+#
+# Each `urls:` entry is a fully-formed Apprise URL. See:
+#   https://github.com/caronc/apprise/wiki
+#
+# Secret-style URLs should NEVER be committed. Use env-var interpolation
+# (${VAR}) and let the workflow inject values from GitHub Secrets / 1Password.
+#
+# Channels listed below are the default fanout. Comment out any you don't
+# want license-watch to use.
+
+# Bind heartbeat + alert routes separately so a misconfigured channel does
+# not blackhole the heartbeat (silent-failure protection).
+alerts:
+  title_prefix: "[license-watch]"
+  urls:
+    # Self-hosted ntfy.sh on Hetzner CX11 (see infra/ntfy/).
+    - "${NTFY_URL:-ntfys://ntfy.example.com/license-watch}"
+
+    # Matrix room (matrix.org or your homeserver).
+    - "${MATRIX_URL:-matrixs://user:pass@matrix.example.com/!roomid:example.com}"
+
+    # Discord webhook (replace token).
+    - "${DISCORD_WEBHOOK:-discord://webhook_id/webhook_token}"
+
+    # Email mirror via SMTP.
+    - "${SMTP_URL:-mailtos://user:pass@smtp.example.com?to=you@example.com&from=watcher@example.com}"
+
+    # Optional Slack — leave commented unless used.
+    # - "${SLACK_URL:-slack://TokenA/TokenB/TokenC/#alerts}"
+
+heartbeat:
+  title_prefix: "[license-watch heartbeat]"
+  urls:
+    - "${NTFY_URL:-ntfys://ntfy.example.com/license-watch-heartbeat}"
+    - "${SMTP_URL:-mailtos://user:pass@smtp.example.com?to=you@example.com&from=watcher@example.com}"
+
+retry:
+  max_attempts: 5
+  base_backoff_seconds: 2  # exponential: 2, 4, 8, 16, 32
+
+dead_letter:
+  jsonl_path: "failed_alerts.jsonl"
+  r2_bucket: "${R2_BUCKET:-license-watch-failed-alerts}"
+  r2_prefix: "alerts/"

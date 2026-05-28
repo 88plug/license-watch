@@ -1,0 +1,41 @@
+# Caddyfile for self-hosted ntfy.sh.
+#
+# - Public path (/ + /v1/...) proxies to ntfy
+# - /admin/* is wrapped in basic auth so only the owner can manage topics
+# - Let's Encrypt cert is automatic — Caddy handles renewal
+#
+# Required env vars (see docker-compose.yml):
+#   NTFY_DOMAIN, ACME_EMAIL, ADMIN_USER, ADMIN_PASS_HASH
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
+{$NTFY_DOMAIN} {
+	encode zstd gzip
+
+	# Admin / management routes — basic auth gate.
+	@admin path /admin* /v1/account* /v1/users*
+	basic_auth @admin {
+		{$ADMIN_USER} {$ADMIN_PASS_HASH}
+	}
+
+	# Tight headers — ntfy serves HTML + JSON + SSE streams.
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Allow SSE: do not let upstream/intermediate proxies buffer.
+		X-Accel-Buffering "no"
+	}
+
+	# All other paths → ntfy. WebSocket / SSE upgrade preserved by Caddy.
+	reverse_proxy ntfy:8080 {
+		flush_interval -1
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host  {host}
+	}
+}

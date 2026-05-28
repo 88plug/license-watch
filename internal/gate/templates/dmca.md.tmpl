@@ -1,0 +1,100 @@
+# DMCA TAKEDOWN NOTICE — DRAFT (NOT YET SUBMITTED)
+
+> **Human gate required.** This draft was assembled by license-watch L7 from
+> evidence captured in L6. Perjury attaches to the **signer**, not to this
+> tool. Read every line. Edit anything inaccurate. Sign only when correct.
+> Submit manually via GitHub's takedown form:
+> <https://github.com/contact/dmca-notice>
+
+**Date:** {{.Date}}
+**Candidate ID:** `{{.CandidateID}}`
+**Clone type (L5):** `{{.CloneType}}`
+
+---
+
+## 1. Confirmation that I read GitHub's filing guide
+
+I have read and understood GitHub's
+[Guide to Submitting a DMCA Takedown Notice](https://docs.github.com/en/site-policy/content-removal-policies/guide-to-submitting-a-dmca-takedown-notice).
+
+## 2. Copyrighted work allegedly infringed
+
+The original copyrighted work is published at:
+
+- {{.OurURL}}
+
+Proof of authorship / ownership:
+
+{{.OurAuthorshipProof}}
+
+## 3. Infringing material — specific URLs
+
+The allegedly infringing material is published at:
+
+- {{.ViolatorURL}}
+
+Specific copied / derived clauses (citations from L5 judge):
+
+{{.InfringedClausesQuoted}}
+
+## 4. Remediation requested
+
+Remove the infringing repository / file(s) listed in section 3, or
+require the user to remove the infringing content and license their
+copy lawfully (a fork that retains attribution and the FSL-1.1-ALv2
+license would be acceptable).
+
+## 5. My contact information
+
+- Name: {{if .SignerName}}{{.SignerName}}{{else}}_______________________________ (fill in){{end}}
+- Email: {{if .SignerEmail}}{{.SignerEmail}}{{else}}_______________________________ (fill in){{end}}
+- Phone: {{if .SignerPhone}}{{.SignerPhone}}{{else}}_______________________________ (fill in){{end}}
+- Physical mailing address: {{if .SignerAddress}}{{.SignerAddress}}{{else}}_______________________________________________________________ (fill in){{end}}
+
+## 6. Alleged infringer's contact information
+
+Visible at the violator URL above. License-watch did not attempt to
+contact the alleged infringer directly before this notice unless a
+prior cease-and-desist (severity:med) issue was opened.
+
+## 7. Good-faith belief statement (verbatim, required)
+
+> {{.GoodFaithStatement}}
+
+## 8. Statement under penalty of perjury (verbatim, required)
+
+> {{.PerjuryStatement}}
+
+## 9. Signature
+
+Signed: ____________ (your name + date)
+
+Physical or electronic signature is required. Typing your full legal
+name on the line above, together with the date, constitutes an
+electronic signature under 17 U.S.C. §512(c)(3)(A)(i).
+
+---
+
+## Evidence pack (L6 — chain of custody)
+
+- Evidence manifest: {{if .EvidenceManifestURL}}{{.EvidenceManifestURL}}{{else}}_(none)_{{end}}
+- Page vault URL: {{if .PageVaultURL}}{{.PageVaultURL}}{{else}}_(none)_{{end}}
+- WACZ capture: {{if .WACZURL}}{{.WACZURL}}{{else}}_(none)_{{end}}
+- Wayback Machine: {{if .WaybackURL}}{{.WaybackURL}}{{else}}_(none)_{{end}}
+
+Rekor transparency-log entries:
+
+{{.RekorEntriesFormatted}}
+
+OpenTimestamps `.ots` proofs (Bitcoin-anchored):
+
+{{.OTSProofsFormatted}}
+
+RFC 3161 TSA proofs:
+
+{{.TSAProofsFormatted}}
+
+---
+
+_Drafted automatically by license-watch L7. Submission is a manual act by
+the named signer above. No automated submission was performed._

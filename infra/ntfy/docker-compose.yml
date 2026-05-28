@@ -1,0 +1,71 @@
+# Self-hosted ntfy.sh on Hetzner CX11 (~$4/mo).
+#
+# Two services:
+#   1. ntfy        — message broker (binwiederhier/ntfy v2.23.0, pinned)
+#   2. caddy       — TLS termination + Let's Encrypt + basic-auth admin
+#
+# Persistent state lives under named volumes so a container rebuild does
+# not lose the message store or Caddy's ACME certs.
+#
+# See infra/ntfy/README.md for exact provisioning commands.
+
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.23.0
+    container_name: ntfy
+    command:
+      - serve
+    environment:
+      - TZ=UTC
+      - NTFY_BASE_URL=${NTFY_BASE_URL:-https://ntfy.example.com}
+      - NTFY_LISTEN_HTTP=:8080
+      - NTFY_CACHE_FILE=/var/cache/ntfy/cache.db
+      - NTFY_CACHE_DURATION=72h
+      - NTFY_AUTH_FILE=/var/lib/ntfy/user.db
+      - NTFY_AUTH_DEFAULT_ACCESS=deny-all
+      - NTFY_BEHIND_PROXY=true
+      - NTFY_ATTACHMENT_CACHE_DIR=/var/cache/ntfy/attachments
+      - NTFY_ENABLE_SIGNUP=false
+      - NTFY_ENABLE_LOGIN=true
+    volumes:
+      - ntfy_cache:/var/cache/ntfy
+      - ntfy_lib:/var/lib/ntfy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/v1/health | grep -q healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks: [ntfy_net]
+
+  caddy:
+    image: caddy:2.10.0-alpine
+    container_name: caddy
+    depends_on:
+      - ntfy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - NTFY_DOMAIN=${NTFY_DOMAIN:-ntfy.example.com}
+      - ACME_EMAIL=${ACME_EMAIL:-andrew@88plug.com}
+      # Pre-hashed (bcrypt) basic-auth credential pair for the admin UI.
+      # Generate with:  docker run --rm caddy:2.10.0-alpine caddy hash-password
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASS_HASH=${ADMIN_PASS_HASH:?set ADMIN_PASS_HASH (bcrypt) in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    networks: [ntfy_net]
+
+volumes:
+  ntfy_cache:
+  ntfy_lib:
+  caddy_data:
+  caddy_config:
+
+networks:
+  ntfy_net:
+    driver: bridge

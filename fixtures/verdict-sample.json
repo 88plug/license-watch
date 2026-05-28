@@ -1,0 +1,27 @@
+{
+  "candidate_id": "sample-cand-001",
+  "severity": "high",
+  "clone_type": "Type-2",
+  "clause_cited": "FSL-1.1-ALv2 §3 — attribution removal",
+  "infringed_clauses": [
+    "func ScanRepo() in scanner.go reproduced verbatim",
+    "README intro paragraph reproduced verbatim with attribution removed"
+  ],
+  "recommended_action": "DMCA takedown",
+  "our_url": "https://github.com/88plug/license-watch",
+  "our_authorship_proof": "First commit by Andrew Mello <andrew@88plug.com> on 2026-01-01. Rekor entry 0xabc...",
+  "violator_url": "https://github.com/example/unauthorized-fork",
+  "violator_contact": "unknown",
+  "evidence_manifest_url": "https://r2.example.com/evidence/sample-cand-001/manifest.json",
+  "page_vault_url": "https://r2.example.com/evidence/sample-cand-001/vault.html",
+  "rekor_entries": ["24296fb24b8ad77a3e07eef84aa4cffac9e3d3a1b5"],
+  "ots_proofs": ["https://r2.example.com/evidence/sample-cand-001/capture.ots"],
+  "tsa_proofs": ["https://r2.example.com/evidence/sample-cand-001/freetsa.tsr"],
+  "wacz_url": "https://r2.example.com/evidence/sample-cand-001/capture.wacz",
+  "wayback_url": "https://web.archive.org/web/20260527/https://github.com/example/unauthorized-fork",
+  "sha256": {
+    "capture.wacz": "deadbeefcafef00d",
+    "vault.html": "facefeedbabe1010"
+  },
+  "created_at": "2026-05-27T11:30:00Z"
+}
