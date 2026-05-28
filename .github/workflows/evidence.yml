@@ -108,7 +108,7 @@ jobs:
 
       - name: Upload manifest as artifact
         if: ${{ steps.cand.outputs.severity == 'high' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: evidence-${{ steps.cand.outputs.id }}
           path: |
