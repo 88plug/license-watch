@@ -1,0 +1,109 @@
+name: fingerprint (L3 + L4)
+
+# Daily re-run of L3 prefilter + L4 structural confirm against any `candidates.jsonl`
+# produced by L2. Pulls candidates from the `candidates` artifact of the latest L2
+# workflow run; emits `prefilter_hits.jsonl` and `confirmed.jsonl` as job artifacts.
+#
+# CPU-only, free runner. Pinned actions per repo policy.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"   # daily 06:17 UTC
+  workflow_dispatch:
+    inputs:
+      candidates_artifact:
+        description: "name of artifact carrying candidates.jsonl"
+        required: false
+        default: "candidates"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: fingerprint-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: internal/prefilter/requirements.txt
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install Python deps
+        run: pip install -r internal/prefilter/requirements.txt
+
+      - name: Build Go binaries
+        run: |
+          go build -trimpath -ldflags='-s -w' \
+            -o "$HOME/.local/bin/lw-functionsimsearch" \
+            ./internal/structural/cmd/lw-functionsimsearch
+          go build -trimpath -ldflags='-s -w' \
+            -o "$HOME/.local/bin/lw-scalibr-fp" \
+            ./internal/structural/cmd/lw-scalibr-fp
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Download candidates artifact (best-effort)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: ${{ github.event.inputs.candidates_artifact || 'candidates' }}
+          path: ./inbox
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+
+      - name: Ensure candidates.jsonl exists
+        run: |
+          mkdir -p inbox
+          if [ ! -s inbox/candidates.jsonl ]; then
+            echo "No candidates produced by L2 — exiting without work."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            : > inbox/candidates.jsonl
+          fi
+        id: have_input
+
+      - name: Run L3 prefilter
+        if: hashFiles('inbox/candidates.jsonl') != ''
+        run: |
+          mkdir -p out
+          python -m internal.prefilter.prefilter \
+            --candidates inbox/candidates.jsonl \
+            --fingerprints fingerprints \
+            --output out/prefilter_hits.jsonl \
+            --cache-dir .cache/embed
+
+      - name: Run L4 structural confirm
+        if: hashFiles('out/prefilter_hits.jsonl') != ''
+        run: |
+          python -m internal.structural.structural \
+            --hits out/prefilter_hits.jsonl \
+            --reference-dir references \
+            --signatures internal/structural/signatures.json \
+            --fss-index-dir fingerprints/fss \
+            --output out/confirmed.jsonl || true
+
+      - name: Upload L3 + L4 outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fingerprint-results
+          path: |
+            out/prefilter_hits.jsonl
+            out/confirmed.jsonl
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,14 @@
+[
+  {
+    "project": "intel-amt-linux",
+    "strings": [
+      "Native Linux GUI + CLI for Intel AMT",
+      "imrsdk-linux"
+    ],
+    "symbols": [
+      "AmtSessionStart",
+      "imrsdk_open_session_v2"
+    ],
+    "min_hits": 2
+  }
+]

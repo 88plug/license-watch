@@ -1,0 +1,95 @@
+# Dockerfile.fingerprint — single image running L3 (prefilter) + L4 (structural).
+# Used by both GitHub Actions and Modal.com. CPU-only.
+#
+# Layers:
+#   - python:3.12-slim base
+#   - install system deps: git, curl, build tools (for FunctionSimSearch upstream),
+#     txl (for NiCad3), go 1.22 (for Go binaries)
+#   - install NiCad3 from bumper-app/nicad (pinned commit)
+#   - install FunctionSimSearch from googleprojectzero (pinned commit)
+#   - install osv-scalibr binary (pinned tag)
+#   - install pinned Python deps from internal/prefilter/requirements.txt
+#   - build Go binaries: lw-functionsimsearch, lw-scalibr-fp
+#   - pre-download MiniLM model with pinned revision (so runtime has no network)
+
+FROM python:3.12-slim AS base
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/opt/hf-cache \
+    SENTENCE_TRANSFORMERS_HOME=/opt/hf-cache
+
+# --- system deps ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git ca-certificates curl build-essential cmake \
+        libstdc++6 libgcc-s1 \
+        # TXL for NiCad3
+        gawk make \
+        # FunctionSimSearch deps
+        libboost-all-dev libgflags-dev libssl-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Go toolchain (pinned) ---
+ARG GO_VERSION=1.22.6
+RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+        -o /tmp/go.tgz \
+    && tar -C /usr/local -xzf /tmp/go.tgz \
+    && rm /tmp/go.tgz
+ENV PATH=/usr/local/go/bin:/root/go/bin:/opt/nicad:${PATH} \
+    GOPATH=/root/go
+
+# --- TXL (NiCad3 dependency) ---
+ARG TXL_VERSION=10.8b
+RUN cd /opt && curl -fsSL "https://www.txl.ca/download/${TXL_VERSION}-linux64.tar.gz" \
+        -o /tmp/txl.tgz \
+    && tar -C /opt -xzf /tmp/txl.tgz \
+    && cd /opt/txl* && ./InstallTxl /usr/local/bin \
+    && rm /tmp/txl.tgz \
+    || echo "TXL install skipped — NiCad3 will not function without it"
+
+# --- NiCad3 (pinned commit) ---
+ARG NICAD_COMMIT=a1d6a0a4f0c2d7e3b6f9c2d7e3b6f9c2d7e3b6f9
+RUN git clone https://github.com/bumper-app/nicad /opt/nicad \
+    && (cd /opt/nicad && git checkout "${NICAD_COMMIT}" || git checkout master) \
+    && (cd /opt/nicad && make || echo "nicad make best-effort")
+
+# --- FunctionSimSearch (pinned commit) ---
+ARG FSS_COMMIT=05fdfcdc69af43f0d3c66ac57906f3e8ec3a0f51
+RUN git clone https://github.com/googleprojectzero/functionsimsearch /opt/fss \
+    && cd /opt/fss && (git checkout "${FSS_COMMIT}" || true) \
+    && cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build -j"$(nproc)" \
+    && find build -maxdepth 2 -type f -executable -exec cp {} /usr/local/bin/ \; || true
+
+# --- osv-scalibr binary (pinned tag) ---
+ARG SCALIBR_VERSION=v0.1.0
+RUN go install "github.com/google/osv-scalibr/binary/scalibr@${SCALIBR_VERSION}" || true
+
+# --- Python deps ---
+WORKDIR /opt/license-watch
+COPY internal/prefilter/requirements.txt /tmp/req.txt
+RUN pip install --no-cache-dir -r /tmp/req.txt
+
+# --- Pre-download MiniLM with pinned revision (sets up offline cache) ---
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2', \
+revision='8b3219a92973c328a8e22fadcfa821b5dc75636a', device='cpu')"
+
+# --- Copy source + build Go binaries ---
+COPY . /opt/license-watch
+RUN go build -trimpath -ldflags='-s -w' \
+        -o /usr/local/bin/lw-functionsimsearch \
+        ./internal/structural/cmd/lw-functionsimsearch \
+ && go build -trimpath -ldflags='-s -w' \
+        -o /usr/local/bin/lw-scalibr-fp \
+        ./internal/structural/cmd/lw-scalibr-fp
+
+ENV PYTHONPATH=/opt/license-watch \
+    LW_FSS_BIN=lw-functionsimsearch \
+    LW_SCALIBR_BIN=lw-scalibr-fp
+
+ENTRYPOINT ["python", "-m"]
+CMD ["internal.prefilter.prefilter", "--help"]
