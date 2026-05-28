@@ -1,0 +1,3 @@
+# L4 structural-confirm orchestrator deps (Python side).
+# Go binaries (lw-functionsimsearch, lw-scalibr-fp) are built separately.
+# No third-party Python deps needed — uses stdlib only.

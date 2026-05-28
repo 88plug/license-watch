@@ -1,0 +1,13 @@
+# L3 prefilter pinned dependencies (CPU-only, reproducible).
+# Pin every dep + every transitive that matters. Re-pin via `pip-compile`.
+datasketch==1.6.4
+py-tlsh==4.7.2
+sentence-transformers==3.0.1
+numpy<2.0
+# transformers + torch are pulled by sentence-transformers; pin to known-good CPU wheels.
+torch==2.3.1
+transformers==4.41.2
+huggingface-hub==0.23.4
+tokenizers==0.19.1
+scikit-learn==1.5.0
+scipy==1.13.1
