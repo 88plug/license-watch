@@ -1,0 +1,110 @@
+# Golden severity-labeled cases. Hand-curated. Used by Promptfoo + by
+# the local Python gate (gate.py) which scores judge-pipeline output vs labels.
+#
+# Severity rubric:
+#   low  — borderline / attributed / non-commercial / fair-use plausible
+#   med  — substantial copy with weak attribution OR competing-use ambiguity
+#   high — verbatim/Type-2 copy with no attribution, FSL §3 Competing Use
+#          violation, or copyleft contamination
+
+- description: "Verbatim fork hosting our SaaS with paid tier inside FSL 2-year window"
+  vars:
+    candidate_url: "https://github.com/badactor/license-watch-saas"
+    clone_type: "Type-1"
+    minhash_score: 0.98
+    tlsh_distance: 4
+    files_matched: 142
+    stars: 11
+    forks: 0
+    age_days: 12
+    commercial_signals: "pricing page at badactor.io/pricing $49/mo team plan"
+    suspect_license_text: ""
+    diffs:
+      - path: "internal/judge/judge.py"
+        score: 0.99
+        snippet: "(verbatim copy, only repo URL changed)"
+  assert:
+    - type: javascript
+      value: "output.severity === 'high'"
+    - type: javascript
+      value: "Array.isArray(output.clauses_cited) && output.clauses_cited.length > 0"
+
+- description: "Renamed-identifier port to another language, full attribution preserved, non-commercial"
+  vars:
+    candidate_url: "https://github.com/researcher/license-watch-rs"
+    clone_type: "Type-2"
+    minhash_score: 0.71
+    tlsh_distance: 38
+    files_matched: 22
+    stars: 4
+    forks: 0
+    age_days: 90
+    commercial_signals: ""
+    suspect_license_text: "FSL-1.1-ALv2 — Copyright (c) Andrew Mello / 88plug. Translated to Rust for research."
+    diffs:
+      - path: "src/judge.rs"
+        score: 0.72
+        snippet: "fn stage1_classify(...) -> CloneType { /* renamed Python -> Rust */ }"
+  assert:
+    - type: javascript
+      value: "output.severity === 'low' || output.severity === 'med'"
+
+- description: "Apache-2.0 fork stripping NOTICE file, substantial copying"
+  vars:
+    candidate_url: "https://github.com/sloppy/license-watch-fork"
+    clone_type: "Type-2"
+    minhash_score: 0.83
+    tlsh_distance: 22
+    files_matched: 58
+    stars: 30
+    forks: 2
+    age_days: 200
+    commercial_signals: ""
+    suspect_license_text: "MIT License — Copyright (c) Sloppy Forker"
+    diffs:
+      - path: "internal/judge/tools.py"
+        score: 0.85
+        snippet: "(SPDX header removed, function names identical)"
+  assert:
+    - type: javascript
+      value: "output.severity === 'med' || output.severity === 'high'"
+
+- description: "Near-miss reimplementation with own license, low similarity, no attribution claim"
+  vars:
+    candidate_url: "https://github.com/indie/license-detector"
+    clone_type: "Type-4"
+    minhash_score: 0.21
+    tlsh_distance: 142
+    files_matched: 3
+    stars: 1
+    forks: 0
+    age_days: 30
+    commercial_signals: ""
+    suspect_license_text: "MIT License — Copyright (c) Indie Dev. Inspired by similar tools."
+    diffs:
+      - path: "detect.py"
+        score: 0.22
+        snippet: "(structurally similar but rewritten)"
+  assert:
+    - type: javascript
+      value: "output.severity === 'low'"
+
+- description: "Type-3 near-miss with verbatim license violation block reproduced and attribution stripped, internal corporate use"
+  vars:
+    candidate_url: "https://github.com/megacorp/internal-watch"
+    clone_type: "Type-3"
+    minhash_score: 0.66
+    tlsh_distance: 45
+    files_matched: 17
+    stars: 0
+    forks: 0
+    age_days: 7
+    commercial_signals: "internal corp tooling, no public sale"
+    suspect_license_text: ""
+    diffs:
+      - path: "internal/judge/prompts/system_irac.md"
+        score: 0.95
+        snippet: "(prompt verbatim, copyright header removed)"
+  assert:
+    - type: javascript
+      value: "output.severity === 'med' || output.severity === 'high'"
