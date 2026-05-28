@@ -1,0 +1,47 @@
+# license-watch — watchlist
+# Format reference: docs/ARCHITECTURE.md §Watchlist format
+#
+# Each project lists distinctive strings the detectors fan out across 17 sources.
+# Add fingerprint paths once L3 prefilter materializes the npy/minhash/tlsh files.
+
+projects:
+  - name: intel-amt-linux
+    github: 88plug/intel-amt-linux
+    aur: intel-amt-linux
+    distinctive_strings:
+      - "Native Linux GUI + CLI for Intel AMT"
+      - "imrsdk-linux"
+      - "intel-amt-linux"
+    license_path: LICENSE.md
+
+  - name: amt-activate-linux
+    github: 88plug/amt-activate-linux
+    aur: amt-activate-linux
+    distinctive_strings:
+      - "amt-activate-linux"
+      - "AMT provisioning state activation"
+    license_path: LICENSE.md
+
+  - name: rpc-go-bin
+    github: 88plug/rpc-go-bin
+    aur: rpc-go-bin
+    distinctive_strings:
+      - "rpc-go-bin"
+      - "Intel AMT rpc-go binary"
+    license_path: LICENSE.md
+
+  - name: k3d-gpu
+    github: 88plug/k3d-gpu
+    aur: k3d-gpu
+    distinctive_strings:
+      - "k3d-gpu"
+      - "k3d with NVIDIA GPU passthrough"
+    license_path: LICENSE.md
+
+  - name: k3d-bin
+    github: 88plug/k3d-bin
+    aur: k3d-bin
+    distinctive_strings:
+      - "k3d-bin"
+      - "k3d Arch Linux binary package"
+    license_path: LICENSE.md

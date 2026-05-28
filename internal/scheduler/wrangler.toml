@@ -1,0 +1,30 @@
+# license-watch — L1 Cloudflare Workers Cron Trigger
+# Docs: https://developers.cloudflare.com/workers/configuration/cron-triggers/
+#
+# Hourly cron fires Worker, Worker invokes Modal.com webhook for heavy CPU work
+# (BigQuery + npm continuous changes) and stores last-seen cursors in KV.
+
+name = "license-watch-scheduler"
+main = "worker.js"
+compatibility_date = "2026-04-01"
+workers_dev = true
+
+# Cron: every hour at :07 to dodge top-of-hour congestion on GH Archive / npm replicate.
+[triggers]
+crons = ["7 * * * *"]
+
+# KV namespace for cursors — created via:
+#   wrangler kv:namespace create LICENSE_WATCH_STATE
+# Then replace id below with returned id.
+[[kv_namespaces]]
+binding = "STATE"
+id = "REPLACE_WITH_KV_ID"
+
+[vars]
+MODAL_WEBHOOK_URL = "https://88plug--license-watch-detect.modal.run"
+WATCHLIST_RAW_URL = "https://raw.githubusercontent.com/88plug/license-watch/main/watch.yml"
+
+# Secrets (set via `wrangler secret put`):
+#   MODAL_TOKEN_ID
+#   MODAL_TOKEN_SECRET
+#   GH_TOKEN

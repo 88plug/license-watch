@@ -1,0 +1,100 @@
+# license-watch — L2 hourly detection on GitHub Actions.
+# Backup to Cloudflare Workers + Modal. Runs even if those go down.
+# Free tier budget: ~100 min/mo — this run is ~3-5 min.
+
+name: detect
+
+on:
+  schedule:
+    - cron: "13 * * * *"   # :13 to spread load away from :00 / :07
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: detect
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build detector
+        run: go build -trimpath -ldflags="-s -w" -o detect ./cmd/detect
+
+      - name: Restore cursors
+        uses: actions/cache/restore@v4
+        with:
+          path: cursors-in.json
+          key: detect-cursors-${{ github.run_id }}
+          restore-keys: |
+            detect-cursors-
+
+      - name: Run detect
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          STACKEXCHANGE_KEY: ${{ secrets.STACKEXCHANGE_KEY }}
+          TELEGRAM_CHANNELS: ${{ secrets.TELEGRAM_CHANNELS }}
+          BIGQUERY_PROJECT: ${{ secrets.BIGQUERY_PROJECT }}
+        run: |
+          ./detect \
+            --watch=watch.yml \
+            --cursors=cursors-in.json \
+            --cursors-out=cursors-out.json \
+            --out=candidates.jsonl \
+            --timeout=180s
+
+      - name: Save cursors
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: cursors-out.json
+          key: detect-cursors-${{ github.run_id }}
+
+      - name: Upload candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidates-${{ github.run_id }}
+          path: candidates.jsonl
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f candidates.jsonl ]; then
+            n=$(wc -l < candidates.jsonl)
+            echo "candidates: $n" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "no candidates.jsonl" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.23"
+          cache: true
+      - run: go test ./...
