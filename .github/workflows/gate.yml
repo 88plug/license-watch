@@ -1,0 +1,112 @@
+name: L7 gate + L8 notify
+
+# Runs L7 (human gate / DMCA draft) on every produced L5 verdict, then
+# fans the disposition out via L8 (Apprise → ntfy + Matrix + Discord + email).
+#
+# Trigger sources:
+#   * workflow_dispatch  — manual replay against an uploaded verdict
+#   * repository_dispatch (event_type=l5_verdict) — fired by upstream L5 job
+#   * workflow_call      — invoked from a pipeline orchestrator
+
+on:
+  workflow_dispatch:
+    inputs:
+      verdict_path:
+        description: "Path to a verdict JSON inside this repo (e.g. fixtures/v.json)"
+        required: true
+        default: "fixtures/verdict-sample.json"
+  repository_dispatch:
+    types: [l5_verdict]
+  workflow_call:
+    inputs:
+      verdict_path:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r internal/notify/requirements.txt
+
+      - name: Resolve verdict path
+        id: vp
+        env:
+          DISPATCH_PATH: ${{ github.event.client_payload.verdict_path }}
+          INPUT_PATH: ${{ inputs.verdict_path }}
+        run: |
+          set -euo pipefail
+          P="${DISPATCH_PATH:-}"
+          if [ -z "$P" ]; then P="${INPUT_PATH:-}"; fi
+          if [ -z "$P" ]; then echo "no verdict_path provided" >&2; exit 1; fi
+          echo "verdict=$P" >> "$GITHUB_OUTPUT"
+
+      - name: Run L7 gate
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_ISSUES || secrets.GITHUB_TOKEN }}
+          SIGNER_NAME: ${{ secrets.SIGNER_NAME }}
+          SIGNER_ADDRESS: ${{ secrets.SIGNER_ADDRESS }}
+          SIGNER_EMAIL: ${{ secrets.SIGNER_EMAIL }}
+          SIGNER_PHONE: ${{ secrets.SIGNER_PHONE }}
+        run: |
+          set -euo pipefail
+          mkdir -p drafts
+          go run ./cmd/gate \
+            --verdict "${{ steps.vp.outputs.verdict }}" \
+            --repo "${{ github.repository }}" \
+            --dispositions dispositions.jsonl \
+            --drafts-dir drafts \
+            | tee disposition.json
+          echo "severity=$(jq -r '.severity' disposition.json)" >> "$GITHUB_OUTPUT"
+          echo "action=$(jq -r '.action' disposition.json)"     >> "$GITHUB_OUTPUT"
+          echo "issue_url=$(jq -r '.issue_url // ""' disposition.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Notify (L8) — alerts channel
+        if: steps.gate.outputs.action != 'log_only'
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          MATRIX_URL: ${{ secrets.MATRIX_URL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          SMTP_URL: ${{ secrets.SMTP_URL }}
+        run: |
+          set -euo pipefail
+          TITLE="[severity:${{ steps.gate.outputs.severity }}] ${{ steps.gate.outputs.action }}"
+          BODY="Disposition: ${{ steps.gate.outputs.action }}\nIssue: ${{ steps.gate.outputs.issue_url }}\nVerdict: ${{ steps.vp.outputs.verdict }}"
+          python -m internal.notify.notify alert \
+            --title "$TITLE" \
+            --body  "$BODY"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: gate-output-${{ github.run_id }}
+          path: |
+            disposition.json
+            dispositions.jsonl
+            drafts/
+            failed_alerts.jsonl
+          if-no-files-found: ignore

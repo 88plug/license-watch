@@ -1,0 +1,49 @@
+# Cease-and-desist (pre-DMCA) — DRAFT
+
+> Severity `med`. Polite first-contact letter intended for the suspect
+> repository's issues page or the maintainer's public email. Sign and
+> deliver manually. If ignored, escalate to a DMCA notice (severity:high).
+
+**Date:** {{.Date}}
+**Candidate ID:** `{{.CandidateID}}`
+
+---
+
+Hi,
+
+I maintain {{.OurURL}}. While monitoring for license compliance I came
+across your project at:
+
+- {{.ViolatorURL}}
+
+It appears to incorporate material from my project. Specifically:
+
+{{.InfringedClausesQuoted}}
+
+My original work is published under FSL-1.1-ALv2, which requires
+attribution and source disclosure. I'd prefer to resolve this amicably:
+
+1. Add a clear attribution notice pointing to {{.OurURL}}.
+2. Include my LICENSE.md verbatim (or a compatible upstream license).
+3. If you intended a hard fork, please make that explicit in your README.
+
+Supporting evidence (independently timestamped):
+
+- Evidence manifest: {{if .EvidenceManifestURL}}{{.EvidenceManifestURL}}{{else}}_(none)_{{end}}
+- Page vault URL: {{if .PageVaultURL}}{{.PageVaultURL}}{{else}}_(none)_{{end}}
+- WACZ capture: {{if .WACZURL}}{{.WACZURL}}{{else}}_(none)_{{end}}
+- Rekor entries:
+{{.RekorEntriesFormatted}}
+
+Please respond within 14 days. If the issue is not addressed I will
+proceed with a formal DMCA takedown notice. This is not a threat — it
+is the documented escalation path.
+
+Thanks for your time,
+
+{{if .SignerName}}{{.SignerName}}{{else}}_______________________________ (your name){{end}}
+{{if .SignerEmail}}{{.SignerEmail}}{{else}}_______________________________ (your email){{end}}
+
+---
+
+_Drafted by license-watch L7. Sender is the human who signs above._

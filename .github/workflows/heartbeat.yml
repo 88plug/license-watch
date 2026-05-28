@@ -1,0 +1,51 @@
+name: L8 heartbeat
+
+# Weekly canary. Fires regardless of activity. If you stop seeing it,
+# the pipeline is silently down — investigate.
+#
+# Why weekly + not daily: free GitHub Actions minutes are scarce, and a
+# weekly cadence is plenty to detect silent failure within a useful window.
+# Daily is one-flag-flip away (cron string).
+
+on:
+  schedule:
+    - cron: "17 13 * * 1"   # Mondays 13:17 UTC — odd minute avoids stampede
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r internal/notify/requirements.txt
+
+      - name: Send heartbeat
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          SMTP_URL: ${{ secrets.SMTP_URL }}
+        run: |
+          python -m internal.notify.heartbeat \
+            --config internal/notify/notify.yml \
+            --state state.json
+
+      - name: Upload dead-letters (if any)
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: heartbeat-dead-letters-${{ github.run_id }}
+          path: failed_alerts.jsonl
+          if-no-files-found: ignore
