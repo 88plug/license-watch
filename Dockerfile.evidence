@@ -1,0 +1,87 @@
+# Dockerfile.evidence — single container for L6 evidence preservation.
+#
+# Bundles every CLI license-watch L6 calls into one reproducible image:
+#   - cosign      (Sigstore Rekor anchoring)
+#   - gitsign     (Sigstore-anchored git commits)
+#   - ots         (OpenTimestamps client, Bitcoin anchor)
+#   - openssl     (RFC 3161 verify)
+#   - rekor-cli   (transparency log audit)
+#   - browsertrix-crawler (WACZ capture)
+#   - playwright + chromium (full-page screenshots)
+#   - preserve    (this repo's L6 orchestrator)
+#
+# Used by both .github/workflows/evidence.yml (CI) and the Hetzner box.
+# Every dependency version pinned for reproducibility.
+
+# --- 1. Build the Go orchestrator. -------------------------------------------
+FROM golang:1.23.4-bookworm AS gobuild
+WORKDIR /src
+COPY go.mod ./
+COPY internal/ ./internal/
+COPY cmd/ ./cmd/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/preserve ./cmd/preserve
+
+# --- 2. Fetch pinned Sigstore + OTS tooling. ---------------------------------
+FROM debian:bookworm-20250520-slim AS tools
+ARG TARGETARCH=amd64
+ARG COSIGN_VERSION=v2.4.1
+ARG GITSIGN_VERSION=v0.12.0
+ARG REKOR_VERSION=v1.3.10
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    curl -fsSL -o /usr/local/bin/cosign \
+      "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-${TARGETARCH}"; \
+    chmod +x /usr/local/bin/cosign; \
+    curl -fsSL -o /usr/local/bin/gitsign \
+      "https://github.com/sigstore/gitsign/releases/download/${GITSIGN_VERSION}/gitsign_${GITSIGN_VERSION#v}_linux_${TARGETARCH}"; \
+    chmod +x /usr/local/bin/gitsign; \
+    curl -fsSL -o /usr/local/bin/rekor-cli \
+      "https://github.com/sigstore/rekor/releases/download/${REKOR_VERSION}/rekor-cli-linux-${TARGETARCH}"; \
+    chmod +x /usr/local/bin/rekor-cli
+
+# --- 3. Final runtime image. -------------------------------------------------
+FROM debian:bookworm-20250520-slim
+LABEL org.opencontainers.image.title="license-watch L6 evidence container"
+LABEL org.opencontainers.image.source="https://github.com/88plug/license-watch"
+LABEL org.opencontainers.image.licenses="FSL-1.1-ALv2"
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        openssl \
+        python3 \
+        python3-pip \
+        python3-venv \
+        nodejs \
+        npm \
+        docker.io \
+        chromium \
+        fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+# OpenTimestamps client (pinned).
+RUN python3 -m venv /opt/ots && \
+    /opt/ots/bin/pip install --no-cache-dir 'opentimestamps-client==0.7.2' && \
+    ln -s /opt/ots/bin/ots /usr/local/bin/ots
+
+# Playwright (pinned), reuse system chromium where possible.
+RUN npm install -g --no-audit --no-fund playwright@1.49.0 && \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright npx playwright install --with-deps chromium
+
+# Sigstore tools from the previous stage.
+COPY --from=tools /usr/local/bin/cosign     /usr/local/bin/cosign
+COPY --from=tools /usr/local/bin/gitsign    /usr/local/bin/gitsign
+COPY --from=tools /usr/local/bin/rekor-cli  /usr/local/bin/rekor-cli
+
+# The preserve orchestrator.
+COPY --from=gobuild /out/preserve /usr/local/bin/preserve
+
+# browsertrix-crawler is invoked via docker-in-docker; pin the tag.
+ENV BROWSERTRIX_IMAGE=webrecorder/browsertrix-crawler:1.5.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+
+WORKDIR /work
+ENTRYPOINT ["/usr/local/bin/preserve"]
