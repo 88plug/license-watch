@@ -1,0 +1,119 @@
+name: L5 — Semantic Judge
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmed_artifact:
+        description: "Name of the confirmed.jsonl artifact from L4 (optional; falls back to checked-in fixture)"
+        required: false
+        default: ""
+  workflow_run:
+    workflows: ["L4 — Confirm Candidates"]
+    types: [completed]
+  pull_request:
+    paths:
+      - "internal/judge/**"
+      - ".github/workflows/judge.yml"
+      - "requirements.txt"
+
+jobs:
+  eval-gate:
+    name: Promptfoo accuracy gate (>=80%)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Install Promptfoo
+        run: npm install -g promptfoo@latest
+
+      - name: Run Promptfoo eval on golden set
+        working-directory: internal/judge/eval
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+        run: promptfoo eval -c promptfooconfig.yaml --output results.json --no-progress-bar
+
+      - name: Enforce >=80% accuracy gate
+        working-directory: internal/judge/eval
+        run: python gate.py --results results.json --threshold 0.80
+
+      - name: Upload eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results
+          path: internal/judge/eval/results.json
+
+  run-judge:
+    name: Run L5 on confirmed.jsonl
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Download L4 confirmed.jsonl artifact (if available)
+        if: ${{ github.event.inputs.confirmed_artifact != '' || github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.event.inputs.confirmed_artifact || 'confirmed.jsonl' }}
+          path: ./artifacts
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Resolve input file
+        id: resolve
+        run: |
+          if [ -f ./artifacts/confirmed.jsonl ]; then
+            echo "input=./artifacts/confirmed.jsonl" >> "$GITHUB_OUTPUT"
+          elif [ -f ./internal/judge/eval/fixtures/confirmed.jsonl ]; then
+            echo "input=./internal/judge/eval/fixtures/confirmed.jsonl" >> "$GITHUB_OUTPUT"
+          else
+            echo "No confirmed.jsonl found; skipping run." >&2
+            exit 0
+          fi
+
+      - name: Judge candidates
+        if: ${{ steps.resolve.outputs.input != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.GOOGLE_AI_API_KEY }}
+          COURTLISTENER_TOKEN: ${{ secrets.COURTLISTENER_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out
+          python -m internal.judge.judge \
+            --input "${{ steps.resolve.outputs.input }}" \
+            --output out/judgments.jsonl
+
+      - name: Upload judgments
+        if: ${{ steps.resolve.outputs.input != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: judgments.jsonl
+          path: out/judgments.jsonl

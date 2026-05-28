@@ -1,0 +1,33 @@
+# Promptfoo eval — L5 severity gate
+# Run:  npx promptfoo@latest eval -c promptfooconfig.yaml
+# Gate: assertions must pass at >=80% on the golden set.
+
+description: "L5 semantic-judge severity scoring vs golden labels"
+
+prompts:
+  - file://../prompts/system_irac.md
+
+providers:
+  # Sonnet is the workhorse vote in Stage-2 — eval its solo behavior.
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 1500
+      temperature: 0
+      headers:
+        anthropic-beta: prompt-caching-2024-07-31
+
+defaultTest:
+  options:
+    # Each test asserts the model outputs JSON whose `severity` matches the golden label.
+    transform: |
+      try {
+        return JSON.parse(output.replace(/^```json|```$/g, '').trim());
+      } catch (e) {
+        return { severity: 'PARSE_ERROR', raw: output };
+      }
+
+tests: file://golden_cases.yaml
+
+# Accuracy gate: >=80% of cases must pass severity assertion.
+sharing: false
+outputPath: ./results.json
