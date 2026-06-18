@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 20
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -65,7 +65,7 @@ jobs:
     timeout-minutes: 30
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_run' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
