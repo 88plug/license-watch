@@ -33,7 +33,7 @@ jobs:
       EVIDENCE_REPO_DIR: ${{ github.workspace }}/evidence-repo
     steps:
       - name: Checkout license-watch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
