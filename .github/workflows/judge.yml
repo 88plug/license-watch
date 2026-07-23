@@ -77,7 +77,7 @@ jobs:
 
       - name: Download L4 confirmed.jsonl artifact (if available)
         if: ${{ github.event.inputs.confirmed_artifact != '' || github.event_name == 'workflow_run' }}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ github.event.inputs.confirmed_artifact || 'confirmed.jsonl' }}
           path: ./artifacts
