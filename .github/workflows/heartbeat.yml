@@ -44,7 +44,7 @@ jobs:
 
       - name: Upload dead-letters (if any)
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: heartbeat-dead-letters-${{ github.run_id }}
           path: failed_alerts.jsonl

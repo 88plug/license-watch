@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload eval artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: promptfoo-results
           path: internal/judge/eval/results.json
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload judgments
         if: ${{ steps.resolve.outputs.input != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: judgments.jsonl
           path: out/judgments.jsonl
