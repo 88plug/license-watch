@@ -1,5 +1,5 @@
 anthropic>=0.122.0
-openai>=2.53.0
+openai>=3.1.0
 google-generativeai>=0.8.6
 jinja2>=3.1.6
 requests>=2.34.2
